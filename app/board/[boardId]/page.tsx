@@ -40,6 +40,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+import dynamic from "next/dynamic"
+
+// Dynamically import the rich text editor to avoid SSR issues
+const ReactQuill = dynamic(() => import("react-quill"), { ssr: false })
+import "react-quill/dist/quill.snow.css"
+
 interface BoardCard {
   _id: string
   title: string
@@ -113,6 +119,10 @@ export default function BoardPage() {
       const response = await apiService.get(`/boards/${boardId}`)
       setBoard(response.data)
       setNotes(response.data.notes || "")
+      // Auto-open notes panel if there's existing data
+      if (response.data.notes && response.data.notes.trim()) {
+        setIsNotesOpen(true)
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to fetch board")
     } finally {
@@ -440,104 +450,6 @@ export default function BoardPage() {
 
         {/* Board Content */}
         <main className="flex h-[calc(100vh-4rem)]">
-          {/* Notes Panel */}
-          <div
-            className={`bg-white border-r transition-all duration-300 ease-in-out ${
-              isNotesOpen ? "w-80" : "w-0"
-            } overflow-hidden`}
-          >
-            {isNotesOpen && (
-              <div className="h-full flex flex-col">
-                <div className="p-4 border-b bg-gray-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Board Notes
-                    </h3>
-                    <Button variant="ghost" size="sm" onClick={() => setIsNotesOpen(false)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <p className="text-sm text-gray-600">Keep track of important information about this board</p>
-                </div>
-
-                <div className="flex-1 p-4">
-                  {isEditingNotes ? (
-                    <div className="h-full flex flex-col">
-                      <Textarea
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Add your board notes here..."
-                        className="flex-1 resize-none border-0 p-0 focus-visible:ring-0 text-sm"
-                        style={{ minHeight: "300px" }}
-                      />
-                      <div className="flex gap-2 mt-4 pt-4 border-t">
-                        <Button
-                          size="sm"
-                          onClick={handleSaveNotes}
-                          disabled={notesLoading}
-                          className="flex items-center gap-1"
-                        >
-                          {notesLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditingNotes(false)
-                            setNotes(board?.notes || "")
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col">
-                      <div className="flex-1">
-                        {notes ? (
-                          <div className="prose prose-sm max-w-none">
-                            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-                              {notes}
-                            </pre>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8">
-                            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                            <p className="text-gray-500 text-sm mb-4">No notes yet</p>
-                            <Button
-                              size="sm"
-                              onClick={() => setIsEditingNotes(true)}
-                              className="flex items-center gap-1"
-                            >
-                              <Plus className="h-3 w-3" />
-                              Add Notes
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {notes && (
-                        <div className="pt-4 border-t">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setIsEditingNotes(true)}
-                            className="w-full flex items-center gap-1"
-                          >
-                            <Edit className="h-3 w-3" />
-                            Edit Notes
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Board Content */}
           <div className="flex-1 p-6 overflow-hidden">
             <DragDropContext onDragEnd={onDragEnd}>
@@ -696,6 +608,139 @@ export default function BoardPage() {
               </div>
             </DragDropContext>
           </div>
+
+          {/* Notes Panel - Right Side */}
+          <div
+            className={`bg-white border-l transition-all duration-300 ease-in-out ${
+              isNotesOpen ? "w-96" : "w-0"
+            } overflow-hidden shadow-lg`}
+          >
+            {isNotesOpen && (
+              <div className="h-full flex flex-col">
+                <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      Board Notes
+                    </h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsNotesOpen(false)}
+                      className="hover:bg-white/50"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Keep track of important information, meeting notes, and sprint goals
+                  </p>
+                </div>
+
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {isEditingNotes ? (
+                    <div className="flex-1 flex flex-col p-4">
+                      <div className="flex-1 border rounded-lg overflow-hidden">
+                        <ReactQuill
+                          value={notes}
+                          onChange={setNotes}
+                          placeholder="Write your board notes here..."
+                          className="h-full"
+                          modules={{
+                            toolbar: [
+                              [{ header: [1, 2, 3, false] }],
+                              ["bold", "italic", "underline", "strike"],
+                              [{ list: "ordered" }, { list: "bullet" }],
+                              [{ color: [] }, { background: [] }],
+                              ["link"],
+                              ["clean"],
+                            ],
+                          }}
+                          formats={[
+                            "header",
+                            "bold",
+                            "italic",
+                            "underline",
+                            "strike",
+                            "list",
+                            "bullet",
+                            "color",
+                            "background",
+                            "link",
+                          ]}
+                        />
+                      </div>
+                      <div className="flex gap-2 mt-4 pt-4 border-t">
+                        <Button
+                          size="sm"
+                          onClick={handleSaveNotes}
+                          disabled={notesLoading}
+                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700"
+                        >
+                          {notesLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                          Save Notes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditingNotes(false)
+                            setNotes(board?.notes || "")
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col">
+                      <div className="flex-1 p-4 overflow-y-auto">
+                        {notes ? (
+                          <div className="prose prose-sm max-w-none">
+                            <div
+                              className="text-sm text-gray-700 leading-relaxed"
+                              dangerouslySetInnerHTML={{ __html: notes }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                            <div className="bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full p-6 mb-4">
+                              <FileText className="h-12 w-12 text-blue-600" />
+                            </div>
+                            <h4 className="text-lg font-medium text-gray-900 mb-2">No notes yet</h4>
+                            <p className="text-gray-500 text-sm mb-6 max-w-xs">
+                              Start documenting your ideas, meeting notes, or project goals
+                            </p>
+                            <Button
+                              onClick={() => setIsEditingNotes(true)}
+                              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Write Notes Here
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {notes && (
+                        <div className="p-4 border-t bg-gray-50">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsEditingNotes(true)}
+                            className="w-full flex items-center gap-2 hover:bg-blue-50 hover:border-blue-200"
+                          >
+                            <Edit className="h-4 w-4" />
+                            Edit Notes
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </main>
 
         {/* Add Card Modal */}
@@ -824,6 +869,31 @@ export default function BoardPage() {
           </DialogContent>
         </Dialog>
       </div>
+      <style jsx global>{`
+        .ql-editor {
+          min-height: 300px !important;
+          font-size: 14px;
+          line-height: 1.6;
+        }
+        
+        .ql-toolbar {
+          border-top: none !important;
+          border-left: none !important;
+          border-right: none !important;
+          border-bottom: 1px solid #e5e7eb !important;
+        }
+        
+        .ql-container {
+          border-left: none !important;
+          border-right: none !important;
+          border-bottom: none !important;
+        }
+        
+        .ql-editor.ql-blank::before {
+          color: #9ca3af;
+          font-style: normal;
+        }
+      `}</style>
     </ProtectedRoute>
   )
 }
