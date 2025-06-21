@@ -64,7 +64,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 import dynamic from "next/dynamic"
-import { useUser } from "@/context/UserContext"
+import { useAuth } from "@/contexts/AuthContext"
 
 // Dynamically import the rich text editor to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false })
@@ -153,7 +153,7 @@ export default function BoardPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  const { user, logout } = useUser()
+  const { user, logout } = useAuth()
 
   useEffect(() => {
     fetchBoard()
