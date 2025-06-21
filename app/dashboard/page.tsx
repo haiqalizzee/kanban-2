@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiService } from "@/services/api"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -35,6 +36,7 @@ import {
   User,
   Eye,
   EyeOff,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
@@ -43,6 +45,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface BoardMember {
   _id: string
@@ -73,7 +86,7 @@ export default function DashboardPage() {
     backgroundColor: "#007bff",
     isPublic: false,
   })
-  const { user, logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
   const { toast } = useToast()
 
   const [searchUsers, setSearchUsers] = useState<BoardMember[]>([])
@@ -120,6 +133,13 @@ export default function DashboardPage() {
     return () => clearTimeout(timeoutId)
   }, [searchQuery])
 
+  // Automatically open dropdown when we have search results
+  useEffect(() => {
+    if (searchUsers.length > 0 || (searchQuery.trim() && !searchLoading)) {
+      setIsSearchOpen(true)
+    }
+  }, [searchUsers, searchQuery, searchLoading])
+
   const fetchBoards = async () => {
     try {
       const response = await apiService.get("/boards")
@@ -141,15 +161,12 @@ export default function DashboardPage() {
     try {
       const response = await apiService.get(`/users/search?query=${encodeURIComponent(query)}&limit=5`)
       console.log("Search response:", response.data) // Debug log
-      setSearchUsers(response.data || [])
+      const users = response.data || []
+      setSearchUsers(users)
     } catch (err: any) {
       console.error("Failed to search users:", err)
       setSearchUsers([])
-      toast({
-        title: "Error",
-        description: "Failed to search users",
-        variant: "destructive",
-      })
+      // Silently handle search errors - no toast needed
     } finally {
       setSearchLoading(false)
     }
@@ -159,9 +176,10 @@ export default function DashboardPage() {
     if (!selectedMembers.find((member) => member._id === user._id)) {
       setSelectedMembers([...selectedMembers, user])
     }
-    setIsSearchOpen(false)
+    // Keep dropdown open and clear search to allow adding more members
     setSearchQuery("")
     setSearchUsers([])
+    // Don't close the dropdown - let user manually close it or continue searching
   }
 
   const handleRemoveMember = (userId: string) => {
@@ -270,6 +288,27 @@ export default function DashboardPage() {
     })
   }
 
+  const handleDeleteBoard = async (boardId: string, boardTitle: string) => {
+    try {
+      await apiService.delete(`/boards/${boardId}`)
+      
+      // Remove the board from the list
+      setBoards(boards.filter(board => board._id !== boardId))
+      
+      toast({
+        title: "Success",
+        description: `Board "${boardTitle}" deleted successfully`,
+      })
+    } catch (err: any) {
+      console.error("Failed to delete board:", err)
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to delete board",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setProfileLoading(true)
@@ -281,9 +320,8 @@ export default function DashboardPage() {
           username: profileData.username,
         })
 
-        // Update user context
-        const updatedUser = { ...user!, username: profileData.username }
-        localStorage.setItem("user", JSON.stringify(updatedUser))
+        // Update user context immediately
+        updateUser({ username: profileData.username })
 
         toast({
           title: "Success",
@@ -345,44 +383,55 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b">
+        <header className="bg-white dark:bg-gray-900 shadow-lg border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
+            <div className="flex justify-between items-center h-20">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Kanban Board</h1>
-                <p className="text-sm text-gray-600">Welcome back, {user?.username}</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Kanban Board</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Welcome back, {user?.username}</p>
               </div>
-              {/* User Profile Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                        {user?.username.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <div className="flex items-center justify-start gap-2 p-2">
-                    <div className="flex flex-col space-y-1 leading-none">
-                      <p className="font-medium">{user?.username}</p>
-                      <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.email}</p>
+              <div className="flex items-center gap-3">
+                {/* Theme Toggle */}
+                <ThemeToggle />
+
+                {/* User Profile Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                          {user?.username.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700" align="end" forceMount>
+                    <div className="flex items-center justify-start gap-2 p-2">
+                      <div className="flex flex-col space-y-1 leading-none">
+                        <p className="font-medium text-gray-900 dark:text-white">{user?.username}</p>
+                        <p className="w-[200px] truncate text-sm text-gray-600 dark:text-gray-400">{user?.email}</p>
+                      </div>
                     </div>
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)}>
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={logout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => setIsProfileModalOpen(true)}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={logout}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
         </header>
@@ -391,84 +440,91 @@ export default function DashboardPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Your Boards</h2>
-              <p className="text-gray-600">Manage and organize your projects</p>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Boards</h2>
+              <p className="text-gray-600 dark:text-gray-400">Manage and organize your projects</p>
             </div>
             <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
               <DialogTrigger asChild>
-                <Button className="flex items-center gap-2">
+                <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors duration-200 shadow-lg hover:shadow-xl text-white">
                   <Plus className="h-4 w-4" />
                   Create New Board
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                 <DialogHeader>
-                  <DialogTitle>Create New Board</DialogTitle>
-                  <DialogDescription>Create a new kanban board to organize your tasks and projects.</DialogDescription>
+                  <DialogTitle className="text-gray-900 dark:text-white">Create New Board</DialogTitle>
+                  <DialogDescription className="text-gray-600 dark:text-gray-400">Create a new kanban board to organize your tasks and projects.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateBoard}>
-                  <div className="grid gap-4 py-4">
+                                      <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="title" className="text-gray-700 dark:text-gray-300">Title *</Label>
+                        <Input
+                          id="title"
+                          value={newBoard.title}
+                          onChange={(e) => setNewBoard({ ...newBoard, title: e.target.value })}
+                          placeholder="Enter board title"
+                          required
+                          className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="description" className="text-gray-700 dark:text-gray-300">Description</Label>
+                        <Textarea
+                          id="description"
+                          value={newBoard.description}
+                          onChange={(e) => setNewBoard({ ...newBoard, description: e.target.value })}
+                          placeholder="Enter board description (optional)"
+                          rows={3}
+                          className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="backgroundColor" className="text-gray-700 dark:text-gray-300">Background Color</Label>
+                        <Input
+                          id="backgroundColor"
+                          type="color"
+                          value={newBoard.backgroundColor}
+                          onChange={(e) => setNewBoard({ ...newBoard, backgroundColor: e.target.value })}
+                          className="h-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                        />
+                      </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="title">Title *</Label>
-                      <Input
-                        id="title"
-                        value={newBoard.title}
-                        onChange={(e) => setNewBoard({ ...newBoard, title: e.target.value })}
-                        placeholder="Enter board title"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        value={newBoard.description}
-                        onChange={(e) => setNewBoard({ ...newBoard, description: e.target.value })}
-                        placeholder="Enter board description (optional)"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="backgroundColor">Background Color</Label>
-                      <Input
-                        id="backgroundColor"
-                        type="color"
-                        value={newBoard.backgroundColor}
-                        onChange={(e) => setNewBoard({ ...newBoard, backgroundColor: e.target.value })}
-                        className="h-10"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Members</Label>
+                      <Label className="text-gray-700 dark:text-gray-300">Members</Label>
                       <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
                             role="combobox"
                             aria-expanded={isSearchOpen}
-                            className="justify-between"
+                            className="justify-between bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700"
                           >
                             Search users to add...
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[400px] p-0">
-                          <Command>
+                        <PopoverContent className="w-[400px] p-0 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                          <Command shouldFilter={false}>
                             <CommandInput
                               placeholder="Search users..."
                               value={searchQuery}
-                              onValueChange={setSearchQuery}
+                              onValueChange={(value) => {
+                                setSearchQuery(value)
+                                if (value.trim()) {
+                                  setIsSearchOpen(true)
+                                }
+                              }}
                             />
                             <CommandList>
                               {searchLoading ? (
                                 <div className="flex items-center justify-center py-6">
                                   <Loader2 className="h-4 w-4 animate-spin" />
-                                  <span className="ml-2 text-sm text-gray-500">Searching...</span>
+                                  <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">Searching...</span>
                                 </div>
                               ) : searchUsers.length === 0 && searchQuery.trim() ? (
-                                <CommandEmpty>No users found.</CommandEmpty>
+                                <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No users found.</div>
                               ) : searchUsers.length === 0 ? (
-                                <div className="py-6 text-center text-sm text-gray-500">
+                                <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                                   Type to search for users...
                                 </div>
                               ) : (
@@ -476,6 +532,7 @@ export default function DashboardPage() {
                                   {searchUsers.map((user) => (
                                     <CommandItem
                                       key={user._id}
+                                      value={user._id}
                                       onSelect={() => handleAddMember(user)}
                                       className="cursor-pointer"
                                     >
@@ -488,7 +545,7 @@ export default function DashboardPage() {
                                       />
                                       <div className="flex flex-col">
                                         <div className="font-medium">{user.username}</div>
-                                        <div className="text-sm text-gray-500">{user.email}</div>
+                                        <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
                                       </div>
                                     </CommandItem>
                                   ))}
@@ -505,14 +562,14 @@ export default function DashboardPage() {
                           {selectedMembers.map((member) => (
                             <div
                               key={member._id}
-                              className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
+                              className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded-full text-sm"
                             >
                               <span>{member.username}</span>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleRemoveMember(member._id)}
-                                className="h-4 w-4 p-0 hover:bg-blue-200"
+                                className="h-4 w-4 p-0 hover:bg-blue-200 dark:hover:bg-blue-800"
                               >
                                 <X className="h-3 w-3" />
                               </Button>
@@ -526,12 +583,13 @@ export default function DashboardPage() {
                         id="isPublic"
                         checked={newBoard.isPublic}
                         onCheckedChange={(checked) => setNewBoard({ ...newBoard, isPublic: checked as boolean })}
+                        className="border-gray-300 dark:border-gray-600"
                       />
-                      <Label htmlFor="isPublic">Make this board public</Label>
+                      <Label htmlFor="isPublic" className="text-gray-700 dark:text-gray-300">Make this board public</Label>
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button type="submit" disabled={createLoading}>
+                    <Button type="submit" disabled={createLoading} className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white">
                       {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Create Board
                     </Button>
@@ -543,10 +601,10 @@ export default function DashboardPage() {
 
           {/* Edit Board Modal */}
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
               <DialogHeader>
-                <DialogTitle>Edit Board</DialogTitle>
-                <DialogDescription>Update your board details and manage members.</DialogDescription>
+                <DialogTitle className="text-gray-900 dark:text-white">Edit Board</DialogTitle>
+                <DialogDescription className="text-gray-600 dark:text-gray-400">Update your board details and manage members.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleEditBoard}>
                 <div className="grid gap-4 py-4">
@@ -598,34 +656,40 @@ export default function DashboardPage() {
                           variant="outline"
                           role="combobox"
                           aria-expanded={isSearchOpen}
-                          className="justify-between"
+                          className="justify-between bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
                           Search users to add...
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0">
-                        <Command>
+                      <PopoverContent className="w-[400px] p-0 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                        <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="Search users..."
                             value={searchQuery}
-                            onValueChange={setSearchQuery}
+                            onValueChange={(value) => {
+                              setSearchQuery(value)
+                              if (value.trim()) {
+                                setIsSearchOpen(true)
+                              }
+                            }}
                           />
                           <CommandList>
                             {searchLoading ? (
                               <div className="flex items-center justify-center py-6">
                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                <span className="ml-2 text-sm text-gray-500">Searching...</span>
+                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">Searching...</span>
                               </div>
                             ) : searchUsers.length === 0 && searchQuery.trim() ? (
-                              <CommandEmpty>No users found.</CommandEmpty>
+                              <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No users found.</div>
                             ) : searchUsers.length === 0 ? (
-                              <div className="py-6 text-center text-sm text-gray-500">Type to search for users...</div>
+                              <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Type to search for users...</div>
                             ) : (
                               <CommandGroup>
                                 {searchUsers.map((user) => (
                                   <CommandItem
                                     key={user._id}
+                                    value={user._id}
                                     onSelect={() => handleAddMember(user)}
                                     className="cursor-pointer"
                                   >
@@ -638,7 +702,7 @@ export default function DashboardPage() {
                                     />
                                     <div className="flex flex-col">
                                       <div className="font-medium">{user.username}</div>
-                                      <div className="text-sm text-gray-500">{user.email}</div>
+                                      <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
                                     </div>
                                   </CommandItem>
                                 ))}
@@ -684,15 +748,16 @@ export default function DashboardPage() {
 
           {/* Loading State */}
           {loading && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
+              <p className="text-gray-600 dark:text-gray-400">Loading your boards...</p>
             </div>
           )}
 
           {/* Error State */}
           {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant="destructive" className="mb-6 bg-white dark:bg-gray-900 border-red-200 dark:border-red-800">
+              <AlertDescription className="text-red-700 dark:text-red-300">{error}</AlertDescription>
             </Alert>
           )}
 
@@ -700,61 +765,95 @@ export default function DashboardPage() {
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {boards.map((board) => (
-                <div key={board._id} className="group">
-                  <Link href={`/board/${board._id}`}>
-                    <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer">
-                      <CardHeader className="pb-3" style={{ backgroundColor: board.backgroundColor + "20" }}>
-                        <div className="flex items-center justify-between">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: board.backgroundColor }} />
-                          <div className="flex items-center gap-2">
-                            {board.isPublic && (
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Public</span>
-                            )}
+                <div key={board._id} className="group relative">
+                  <Card className="hover:shadow-xl dark:hover:shadow-gray-900/50 transition-all duration-200 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                    <CardHeader className="pb-3" style={{ backgroundColor: board.backgroundColor + "20" }}>
+                      <div className="flex items-center justify-between">
+                        <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: board.backgroundColor }} />
+                        <div className="flex items-center gap-2">
+                          {board.isPublic && (
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded-full font-medium">Public</span>
+                          )}
+                          <div className="flex items-center gap-1 z-10 relative">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={(e) => {
-                                e.preventDefault()
+                                e.stopPropagation()
                                 openEditModal(board)
                               }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="hover:bg-blue-100 dark:hover:bg-blue-900/50 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 h-6 w-6 p-0"
                             >
                               <Edit className="h-3 w-3" />
                             </Button>
+                            
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="hover:bg-red-100 dark:hover:bg-red-900/50 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 h-6 w-6 p-0"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle className="text-gray-900 dark:text-white">Delete Board</AlertDialogTitle>
+                                  <AlertDialogDescription className="text-gray-600 dark:text-gray-400">
+                                    Are you sure you want to delete the board "{board.title}"? This action cannot be undone and will permanently delete all columns and cards in this board.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteBoard(board._id, board.title)}
+                                    className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white"
+                                  >
+                                    Delete Board
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
-                        <CardTitle className="text-lg group-hover:text-blue-600 transition-colors">
+                      </div>
+                      <div className="cursor-pointer" onClick={() => window.location.href = `/board/${board._id}`}>
+                        <CardTitle className="text-lg hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-gray-900 dark:text-white">
                           {board.title}
                         </CardTitle>
                         {board.description && (
-                          <CardDescription className="line-clamp-2">{board.description}</CardDescription>
+                          <CardDescription className="line-clamp-2 text-gray-600 dark:text-gray-400">{board.description}</CardDescription>
                         )}
-                      </CardHeader>
-                      <CardContent className="pt-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center text-sm text-gray-500">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            Created {formatDate(board.createdAt)}
-                          </div>
-                          {board.members && board.members.length > 0 && (
-                            <div className="flex items-center text-sm text-gray-500">
-                              <UserPlus className="h-4 w-4 mr-1" />
-                              {board.members.length} member{board.members.length !== 1 ? "s" : ""}
-                            </div>
-                          )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-3 cursor-pointer" onClick={() => window.location.href = `/board/${board._id}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <Calendar className="h-4 w-4 mr-1" />
+                          Created {formatDate(board.createdAt)}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                        {board.members && board.members.length > 0 && (
+                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            {board.members.length} member{board.members.length !== 1 ? "s" : ""}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               ))}
 
               {boards.length === 0 && (
                 <div className="col-span-full text-center py-12">
-                  <div className="text-gray-400 mb-4">
+                  <div className="text-gray-400 dark:text-gray-500 mb-4">
                     <Plus className="h-12 w-12 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No boards yet</h3>
-                    <p className="text-gray-600">Create your first board to get started</p>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No boards yet</h3>
+                    <p className="text-gray-600 dark:text-gray-400">Create your first board to get started</p>
                   </div>
                 </div>
               )}
@@ -770,23 +869,23 @@ export default function DashboardPage() {
           if (!open) resetProfileForm()
         }}
       >
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
           <DialogHeader>
-            <DialogTitle>Profile Settings</DialogTitle>
-            <DialogDescription>Update your username and password here.</DialogDescription>
+            <DialogTitle className="text-gray-900 dark:text-white">Profile Settings</DialogTitle>
+            <DialogDescription className="text-gray-600 dark:text-gray-400">Update your username and password here.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdateProfile}>
             <div className="grid gap-4 py-4">
               {/* Current User Info */}
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <Avatar className="h-12 w-12">
                   <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-lg font-semibold">
                     {user?.username.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium">{user?.username}</p>
-                  <p className="text-sm text-gray-500">{user?.email}</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{user?.username}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</p>
                 </div>
               </div>
 

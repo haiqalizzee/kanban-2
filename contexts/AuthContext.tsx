@@ -17,6 +17,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
+  updateUser: (userData: Partial<User>) => void
   loading: boolean
 }
 
@@ -89,7 +90,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     router.push("/login")
   }
 
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      const updatedUser = { ...user, ...userData }
+      setUser(updatedUser)
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, loading }}>{children}</AuthContext.Provider>
   )
 }

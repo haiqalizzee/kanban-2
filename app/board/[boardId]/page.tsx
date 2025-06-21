@@ -65,6 +65,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import dynamic from "next/dynamic"
 import { useAuth } from "@/contexts/AuthContext"
+import Head from "next/head"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 // Dynamically import the rich text editor to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false })
@@ -109,10 +111,10 @@ interface Board {
 }
 
 const priorityColors = {
-  low: "bg-green-100 text-green-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  urgent: "bg-red-100 text-red-800",
+  low: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300",
+  medium: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+  high: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300",
+  urgent: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
 }
 
 export default function BoardPage() {
@@ -153,7 +155,7 @@ export default function BoardPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  const { user, logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
 
   useEffect(() => {
     fetchBoard()
@@ -416,9 +418,8 @@ export default function BoardPage() {
           username: profileData.username,
         })
 
-        // Update user context
-        const updatedUser = { ...user!, username: profileData.username }
-        localStorage.setItem("user", JSON.stringify(updatedUser))
+        // Update user context immediately
+        updateUser({ username: profileData.username })
 
         toast({
           title: "Success",
@@ -481,8 +482,15 @@ export default function BoardPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="flex items-center justify-center min-h-screen">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        <Head>
+          <title>Loading Board...</title>
+        </Head>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-2">Loading Board</h2>
+            <p className="text-gray-500 dark:text-gray-400">Please wait while we fetch your board data...</p>
+          </div>
         </div>
       </ProtectedRoute>
     )
@@ -491,10 +499,28 @@ export default function BoardPage() {
   if (error || !board) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 p-4">
-          <Alert variant="destructive">
-            <AlertDescription>{error || "Board not found"}</AlertDescription>
-          </Alert>
+        <Head>
+          <title>Board Not Found</title>
+        </Head>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-8 flex items-center justify-center">
+          <div className="max-w-md w-full">
+            <Alert variant="destructive" className="shadow-lg border-red-200 dark:border-red-800 bg-white dark:bg-gray-900">
+              <AlertDescription className="text-center">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-red-800 dark:text-red-400 mb-2">Oops! Something went wrong</h3>
+                  <p className="text-red-700 dark:text-red-300">{error || "Board not found"}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => router.push("/dashboard")}
+                  className="mt-4 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
       </ProtectedRoute>
     )
@@ -502,41 +528,53 @@ export default function BoardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
+      <Head>
+        <title>Board Page</title>
+      </Head>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b">
+        <header className="bg-white dark:bg-gray-900 shadow-lg border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center gap-4">
-                <Button variant="ghost" onClick={() => router.push("/dashboard")}>
+            <div className="flex justify-between items-center h-20">
+              <div className="flex items-center gap-6">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => router.push("/dashboard")}
+                  className="hover:bg-blue-50 dark:hover:bg-gray-800 transition-colors duration-200 text-gray-700 dark:text-gray-300"
+                >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Dashboard
                 </Button>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">{board.title}</h1>
-                  {board.description && <p className="text-sm text-gray-600">{board.description}</p>}
+                <div className="border-l border-gray-300 dark:border-gray-600 pl-6">
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{board.title}</h1>
+                  {board.description && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md">{board.description}</p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                {/* Theme Toggle */}
+                <ThemeToggle />
+
                 {/* Board Members */}
                 {board.members && board.members.length > 0 && (
                   <TooltipProvider>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600 font-medium">Members:</span>
+                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                      <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Team:</span>
                       <div className="flex -space-x-2">
                         {board.members.slice(0, 5).map((member) => (
                           <Tooltip key={member._id}>
                             <TooltipTrigger asChild>
-                              <Avatar className="h-8 w-8 border-2 border-white hover:z-10 cursor-pointer transition-transform hover:scale-110">
-                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-semibold">
+                              <Avatar className="h-9 w-9 border-2 border-white hover:z-10 cursor-pointer transition-all duration-200 hover:scale-110 hover:shadow-lg">
+                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
                                   {member.username.charAt(0).toUpperCase()}
                                 </AvatarFallback>
                               </Avatar>
                             </TooltipTrigger>
-                            <TooltipContent>
+                            <TooltipContent side="bottom" className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900">
                               <div className="text-center">
                                 <p className="font-medium">{member.username}</p>
-                                <p className="text-xs text-gray-500">{member.email}</p>
+                                <p className="text-xs text-gray-300 dark:text-gray-600">{member.email}</p>
                               </div>
                             </TooltipContent>
                           </Tooltip>
@@ -544,17 +582,17 @@ export default function BoardPage() {
                         {board.members.length > 5 && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Avatar className="h-8 w-8 border-2 border-white bg-gray-100 cursor-pointer">
-                                <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
+                              <Avatar className="h-9 w-9 border-2 border-white bg-gray-100 cursor-pointer transition-all duration-200 hover:scale-110">
+                                <AvatarFallback className="bg-gradient-to-br from-gray-400 to-gray-500 text-white text-sm">
                                   +{board.members.length - 5}
                                 </AvatarFallback>
                               </Avatar>
                             </TooltipTrigger>
-                            <TooltipContent>
+                            <TooltipContent side="bottom" className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900">
                               <div>
-                                <p className="font-medium">More members:</p>
+                                <p className="font-medium mb-1">More members:</p>
                                 {board.members.slice(5).map((member) => (
-                                  <p key={member._id} className="text-xs">
+                                  <p key={member._id} className="text-xs text-gray-300 dark:text-gray-600">
                                     {member.username}
                                   </p>
                                 ))}
@@ -570,14 +608,18 @@ export default function BoardPage() {
                 <Button
                   variant="outline"
                   onClick={() => setIsNotesOpen(!isNotesOpen)}
-                  className="flex items-center gap-2"
+                  className={`flex items-center gap-2 transition-all duration-200 border-gray-200 dark:border-gray-700 ${
+                    isNotesOpen 
+                      ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50" 
+                      : "hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  }`}
                 >
                   <FileText className="h-4 w-4" />
                   Notes
                 </Button>
                 <Dialog open={isAddColumnModalOpen} onOpenChange={setIsAddColumnModalOpen}>
                   <DialogTrigger asChild>
-                    <Button className="flex items-center gap-2">
+                    <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors duration-200 shadow-lg hover:shadow-xl text-white">
                       <Plus className="h-4 w-4" />
                       Add Column
                     </Button>
@@ -638,19 +680,25 @@ export default function BoardPage() {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuContent className="w-56 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700" align="end" forceMount>
                     <div className="flex items-center justify-start gap-2 p-2">
                       <div className="flex flex-col space-y-1 leading-none">
-                        <p className="font-medium">{user?.username}</p>
-                        <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.email}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{user?.username}</p>
+                        <p className="w-[200px] truncate text-sm text-gray-600 dark:text-gray-400">{user?.email}</p>
                       </div>
                     </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)}>
+                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
+                    <DropdownMenuItem 
+                      onClick={() => setIsProfileModalOpen(true)}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    >
                       <User className="mr-2 h-4 w-4" />
                       Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={logout}>
+                    <DropdownMenuItem 
+                      onClick={logout}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    >
                       <LogOut className="mr-2 h-4 w-4" />
                       Logout
                     </DropdownMenuItem>
@@ -662,25 +710,35 @@ export default function BoardPage() {
         </header>
 
         {/* Board Content */}
-        <main className="flex h-[calc(100vh-4rem)]">
+        <main className="flex h-[calc(100vh-5rem)]">
           {/* Board Content */}
-          <div className="flex-1 p-6 overflow-hidden">
+          <div className="flex-1 p-8 overflow-hidden">
             <DragDropContext onDragEnd={onDragEnd}>
-              <div className="flex gap-6 overflow-x-auto pb-6 h-full">
+              <div className="flex gap-8 overflow-x-auto pb-8 h-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                 {board.columns.map((column) => (
                   <div key={column._id} className="flex-shrink-0 w-80">
-                    <Card className="h-full">
-                      <CardHeader className="pb-3">
+                    <Card className="h-full bg-white dark:bg-gray-900 shadow-lg border-0 dark:border dark:border-gray-700 rounded-xl overflow-hidden">
+                      <CardHeader className="pb-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 border-b border-gray-200 dark:border-gray-600">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: column.color }} />
-                            <CardTitle className="text-sm font-medium">{column.title}</CardTitle>
-                            <Badge variant="secondary" className="text-xs">
+                          <div className="flex items-center gap-3">
+                            <div 
+                              className="w-4 h-4 rounded-full shadow-sm" 
+                              style={{ backgroundColor: column.color }} 
+                            />
+                            <CardTitle className="text-lg font-semibold text-gray-800 dark:text-white">{column.title}</CardTitle>
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs font-medium ${
+                                column.limit && column.cards.length >= column.limit 
+                                  ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" 
+                                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                              }`}
+                            >
                               {column.cards.length}
                               {column.limit && `/${column.limit}`}
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -688,12 +746,17 @@ export default function BoardPage() {
                                 setSelectedColumnId(column._id)
                                 setIsAddCardModalOpen(true)
                               }}
+                              className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 text-gray-600 dark:text-gray-400"
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="h-8 w-8 p-0 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 text-gray-600 dark:text-gray-400"
+                                >
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
@@ -729,14 +792,16 @@ export default function BoardPage() {
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="pt-0">
+                      <CardContent className="pt-0 px-4 pb-4">
                         <Droppable droppableId={column._id}>
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.droppableProps}
-                              className={`space-y-3 min-h-[200px] p-2 rounded-lg transition-colors ${
-                                snapshot.isDraggingOver ? "bg-blue-50" : ""
+                              className={`space-y-4 min-h-[300px] p-3 rounded-xl transition-all duration-200 ${
+                                snapshot.isDraggingOver 
+                                  ? "bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-dashed border-blue-300 dark:border-blue-600" 
+                                  : "bg-transparent"
                               }`}
                             >
                               {column.cards.map((card, index) => (
@@ -746,19 +811,25 @@ export default function BoardPage() {
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
                                       {...provided.dragHandleProps}
-                                      className={`bg-white p-3 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer ${
-                                        snapshot.isDragging ? "rotate-3 shadow-lg" : ""
+                                      className={`bg-white dark:bg-gray-800 p-4 rounded-xl border-0 shadow-md hover:shadow-xl dark:shadow-gray-900/50 transition-all duration-200 cursor-pointer group ${
+                                        snapshot.isDragging 
+                                          ? "rotate-2 shadow-2xl scale-105 ring-2 ring-blue-300 dark:ring-blue-600" 
+                                          : "hover:scale-[1.02]"
                                       }`}
                                     >
-                                      <div className="flex items-start justify-between mb-2">
-                                        <h4 className="font-medium text-sm text-gray-900 flex-1">{card.title}</h4>
+                                      <div className="flex items-start justify-between mb-3">
+                                        <h4 className="font-semibold text-sm text-gray-900 dark:text-white flex-1 leading-relaxed">{card.title}</h4>
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm" 
+                                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+                                            >
                                               <MoreHorizontal className="h-3 w-3" />
                                             </Button>
                                           </DropdownMenuTrigger>
-                                          <DropdownMenuContent>
+                                          <DropdownMenuContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                                             <DropdownMenuItem onClick={() => openEditCardModal(card)}>
                                               <Edit className="h-4 w-4 mr-2" />
                                               Edit Card
@@ -792,20 +863,20 @@ export default function BoardPage() {
                                           </DropdownMenuContent>
                                         </DropdownMenu>
                                       </div>
-                                      {card.description && (
-                                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">{card.description}</p>
-                                      )}
-                                      <div className="flex items-center justify-between">
-                                        <Badge className={`text-xs ${priorityColors[card.priority]}`}>
-                                          {card.priority}
-                                        </Badge>
-                                        {card.dueDate && (
-                                          <div className="flex items-center text-xs text-gray-500">
-                                            <Calendar className="h-3 w-3 mr-1" />
-                                            {new Date(card.dueDate).toLocaleDateString()}
-                                          </div>
+                                                                              {card.description && (
+                                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 line-clamp-2 leading-relaxed">{card.description}</p>
                                         )}
-                                      </div>
+                                        <div className="flex items-center justify-between mt-auto">
+                                          <Badge className={`text-xs font-medium px-2 py-1 rounded-full ${priorityColors[card.priority]}`}>
+                                            {card.priority.charAt(0).toUpperCase() + card.priority.slice(1)}
+                                          </Badge>
+                                          {card.dueDate && (
+                                            <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded-md">
+                                              <Calendar className="h-3 w-3 mr-1" />
+                                              {new Date(card.dueDate).toLocaleDateString()}
+                                            </div>
+                                          )}
+                                        </div>
                                     </div>
                                   )}
                                 </Draggable>
@@ -824,116 +895,156 @@ export default function BoardPage() {
 
           {/* Notes Panel - Right Side */}
           <div
-            className={`bg-white border-l transition-all duration-300 ease-in-out ${
+            className={`bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${
               isNotesOpen ? "w-96" : "w-0"
-            } overflow-hidden shadow-lg`}
+            } overflow-hidden shadow-lg dark:shadow-gray-900/50`}
           >
             {isNotesOpen && (
               <div className="h-full flex flex-col">
-                <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       Board Notes
                     </h3>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setIsNotesOpen(false)}
-                      className="hover:bg-white/50"
+                      className="hover:bg-white/50 dark:hover:bg-gray-800/50 text-gray-600 dark:text-gray-400"
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Keep track of important information, meeting notes, and sprint goals
                   </p>
                 </div>
 
                 <div className="flex-1 flex flex-col overflow-hidden">
                   {isEditingNotes ? (
-                    <div className="flex-1 flex flex-col p-4">
-                      <div className="flex-1 border rounded-lg overflow-hidden">
-                        <ReactQuill
-                          value={notes}
-                          onChange={setNotes}
-                          placeholder="Write your board notes here..."
-                          className="h-full"
-                          modules={{
-                            toolbar: [
-                              [{ header: [1, 2, 3, false] }],
-                              ["bold", "italic", "underline", "strike"],
-                              [{ list: "ordered" }, { list: "bullet" }],
-                              [{ color: [] }, { background: [] }],
-                              ["link"],
-                              ["clean"],
-                            ],
-                          }}
-                          formats={[
-                            "header",
-                            "bold",
-                            "italic",
-                            "underline",
-                            "strike",
-                            "list",
-                            "bullet",
-                            "color",
-                            "background",
-                            "link",
-                          ]}
-                        />
+                    <div className="flex-1 flex flex-col">
+                      {/* Editing Header */}
+                      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
+                        <h4 className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                          <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          Editing Notes
+                        </h4>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Use the toolbar below to format your notes
+                        </div>
                       </div>
-                      <div className="flex gap-2 mt-4 pt-4 border-t">
-                        <Button
-                          size="sm"
-                          onClick={handleSaveNotes}
-                          disabled={notesLoading}
-                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700"
-                        >
-                          {notesLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                          Save Notes
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditingNotes(false)
-                            setNotes(board?.notes || "")
-                          }}
-                        >
-                          Cancel
-                        </Button>
+
+                      {/* Editor */}
+                      <div className="flex-1 flex flex-col p-4">
+                        <div className="flex-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+                          <ReactQuill
+                            value={notes}
+                            onChange={setNotes}
+                            placeholder="Write your board notes here... You can use the toolbar to format text, add lists, links and more!"
+                            className="h-full"
+                            theme="snow"
+                            modules={{
+                              toolbar: [
+                                [{ header: [1, 2, 3, false] }],
+                                ["bold", "italic", "underline", "strike"],
+                                [{ list: "ordered" }, { list: "bullet" }],
+                                [{ color: [] }, { background: [] }],
+                                ["link", "blockquote", "code-block"],
+                                ["clean"],
+                              ],
+                            }}
+                            formats={[
+                              "header",
+                              "bold",
+                              "italic",
+                              "underline",
+                              "strike",
+                              "list",
+                              "bullet",
+                              "color",
+                              "background",
+                              "link",
+                              "blockquote",
+                              "code-block",
+                            ]}
+                          />
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <Button
+                            size="sm"
+                            onClick={handleSaveNotes}
+                            disabled={notesLoading}
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white"
+                          >
+                            {notesLoading ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Save className="h-3 w-3" />
+                            )}
+                            {notesLoading ? "Saving..." : "Save Notes"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setIsEditingNotes(false)
+                              setNotes(board?.notes || "")
+                            }}
+                            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col">
-                      <div className="flex-1 p-4 overflow-y-auto">
-                        {notes ? (
-                          <div className="prose prose-sm max-w-none">
-                            <div
-                              className="text-sm text-gray-700 leading-relaxed"
-                              dangerouslySetInnerHTML={{ __html: notes }}
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                            <div className="bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full p-6 mb-4">
-                              <FileText className="h-12 w-12 text-blue-600" />
-                            </div>
-                            <h4 className="text-lg font-medium text-gray-900 mb-2">No notes yet</h4>
-                            <p className="text-gray-500 text-sm mb-6 max-w-xs">
-                              Start documenting your ideas, meeting notes, or project goals
-                            </p>
+                      {notes ? (
+                        <>
+                          {/* Notes Header with Edit Button */}
+                          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                            <h4 className="font-medium text-gray-900 dark:text-white">Notes Content</h4>
                             <Button
+                              size="sm"
                               onClick={() => setIsEditingNotes(true)}
-                              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
                             >
-                              <Plus className="h-4 w-4" />
-                              Write Notes Here
+                              <Edit className="h-3 w-3" />
+                              Edit Notes
                             </Button>
                           </div>
-                        )}
-                      </div>
+                          
+                          {/* Notes Display */}
+                          <div className="flex-1 p-4 overflow-y-auto">
+                            <div className="prose prose-sm max-w-none dark:prose-invert">
+                              <div
+                                className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed"
+                                dangerouslySetInnerHTML={{ __html: notes }}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
+                          <div className="bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-full p-6 mb-4">
+                            <FileText className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No notes yet</h4>
+                          <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-xs">
+                            Start documenting your ideas, meeting notes, or project goals
+                          </p>
+                          <Button
+                            onClick={() => setIsEditingNotes(true)}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Write Notes
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
