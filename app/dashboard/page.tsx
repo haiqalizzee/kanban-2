@@ -79,10 +79,24 @@ export default function DashboardPage() {
     isPublic: false,
     members: [] as User[],
   })
+  const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
     fetchBoards()
   }, [])
+
+  // Debounce search to avoid too many API calls
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim()) {
+        searchUsersAPI(searchQuery)
+      } else {
+        setSearchUsers([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
 
   const fetchBoards = async () => {
     try {
@@ -101,12 +115,21 @@ export default function DashboardPage() {
       return
     }
 
+    setSearchLoading(true)
     try {
-      const response = await apiService.get(`/users/search?query=${query}&limit=5`)
-      setSearchUsers(response.data)
+      const response = await apiService.get(`/users/search?query=${encodeURIComponent(query)}&limit=5`)
+      console.log("Search response:", response.data) // Debug log
+      setSearchUsers(response.data || [])
     } catch (err: any) {
       console.error("Failed to search users:", err)
       setSearchUsers([])
+      toast({
+        title: "Error",
+        description: "Failed to search users",
+        variant: "destructive",
+      })
+    } finally {
+      setSearchLoading(false)
     }
   }
 
@@ -144,9 +167,15 @@ export default function DashboardPage() {
 
     try {
       const boardData = {
-        ...editBoard,
-        members: selectedMembers.map((member) => member._id),
+        title: editBoard.title,
+        description: editBoard.description,
+        backgroundColor: editBoard.backgroundColor,
+        isPublic: editBoard.isPublic,
+        members: selectedMembers.map((member) => member._id), // Send only IDs
       }
+
+      console.log("Updating board with data:", boardData) // Debug log
+
       const response = await apiService.put(`/boards/${editingBoard._id}`, boardData)
 
       // Update the board in the list
@@ -164,6 +193,7 @@ export default function DashboardPage() {
         description: "Board updated successfully",
       })
     } catch (err: any) {
+      console.error("Failed to update board:", err)
       toast({
         title: "Error",
         description: err.response?.data?.message || "Failed to update board",
@@ -180,9 +210,15 @@ export default function DashboardPage() {
 
     try {
       const boardData = {
-        ...newBoard,
-        members: selectedMembers.map((member) => member._id),
+        title: newBoard.title,
+        description: newBoard.description,
+        backgroundColor: newBoard.backgroundColor,
+        isPublic: newBoard.isPublic,
+        members: selectedMembers.map((member) => member._id), // Send only IDs as expected
       }
+
+      console.log("Creating board with data:", boardData) // Debug log
+
       const response = await apiService.post("/boards", boardData)
       setBoards([...boards, { ...response.data, members: selectedMembers }])
       setIsCreateModalOpen(false)
@@ -193,6 +229,7 @@ export default function DashboardPage() {
         description: "Board created successfully",
       })
     } catch (err: any) {
+      console.error("Failed to create board:", err)
       toast({
         title: "Error",
         description: err.response?.data?.message || "Failed to create board",
@@ -295,39 +332,48 @@ export default function DashboardPage() {
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
+                        <PopoverContent className="w-[400px] p-0">
                           <Command>
                             <CommandInput
                               placeholder="Search users..."
                               value={searchQuery}
-                              onValueChange={(value) => {
-                                setSearchQuery(value)
-                                searchUsersAPI(value)
-                              }}
+                              onValueChange={setSearchQuery}
                             />
                             <CommandList>
-                              <CommandEmpty>No users found.</CommandEmpty>
-                              <CommandGroup>
-                                {searchUsers.map((user) => (
-                                  <CommandItem
-                                    key={user._id}
-                                    onSelect={() => handleAddMember(user)}
-                                    className="cursor-pointer"
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 ${
-                                        selectedMembers.find((member) => member._id === user._id)
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      }`}
-                                    />
-                                    <div>
-                                      <div className="font-medium">{user.username}</div>
-                                      <div className="text-sm text-gray-500">{user.email}</div>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
+                              {searchLoading ? (
+                                <div className="flex items-center justify-center py-6">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span className="ml-2 text-sm text-gray-500">Searching...</span>
+                                </div>
+                              ) : searchUsers.length === 0 && searchQuery.trim() ? (
+                                <CommandEmpty>No users found.</CommandEmpty>
+                              ) : searchUsers.length === 0 ? (
+                                <div className="py-6 text-center text-sm text-gray-500">
+                                  Type to search for users...
+                                </div>
+                              ) : (
+                                <CommandGroup>
+                                  {searchUsers.map((user) => (
+                                    <CommandItem
+                                      key={user._id}
+                                      onSelect={() => handleAddMember(user)}
+                                      className="cursor-pointer"
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          selectedMembers.find((member) => member._id === user._id)
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        }`}
+                                      />
+                                      <div className="flex flex-col">
+                                        <div className="font-medium">{user.username}</div>
+                                        <div className="text-sm text-gray-500">{user.email}</div>
+                                      </div>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              )}
                             </CommandList>
                           </Command>
                         </PopoverContent>
@@ -373,81 +419,89 @@ export default function DashboardPage() {
                 </form>
               </DialogContent>
             </Dialog>
-            {/* Edit Board Modal */}
-            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Edit Board</DialogTitle>
-                  <DialogDescription>Update your board details and manage members.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleEditBoard}>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="editTitle">Title *</Label>
-                      <Input
-                        id="editTitle"
-                        value={editBoard.title}
-                        onChange={(e) => setEditBoard({ ...editBoard, title: e.target.value })}
-                        placeholder="Enter board title"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="editDescription">Description</Label>
-                      <Textarea
-                        id="editDescription"
-                        value={editBoard.description}
-                        onChange={(e) => setEditBoard({ ...editBoard, description: e.target.value })}
-                        placeholder="Enter board description (optional)"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="editBackgroundColor">Background Color</Label>
-                      <Input
-                        id="editBackgroundColor"
-                        type="color"
-                        value={editBoard.backgroundColor}
-                        onChange={(e) => setEditBoard({ ...editBoard, backgroundColor: e.target.value })}
-                        className="h-10"
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="editIsPublic"
-                        checked={editBoard.isPublic}
-                        onCheckedChange={(checked) => setEditBoard({ ...editBoard, isPublic: checked as boolean })}
-                      />
-                      <Label htmlFor="editIsPublic">Make this board public</Label>
-                    </div>
+          </div>
 
-                    {/* Members Section */}
-                    <div className="grid gap-2">
-                      <Label>Members</Label>
-                      <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isSearchOpen}
-                            className="justify-between"
-                          >
-                            Search users to add...
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
-                          <Command>
-                            <CommandInput
-                              placeholder="Search users..."
-                              value={searchQuery}
-                              onValueChange={(value) => {
-                                setSearchQuery(value)
-                                searchUsersAPI(value)
-                              }}
-                            />
-                            <CommandList>
+          {/* Edit Board Modal */}
+          <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Edit Board</DialogTitle>
+                <DialogDescription>Update your board details and manage members.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleEditBoard}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="editTitle">Title *</Label>
+                    <Input
+                      id="editTitle"
+                      value={editBoard.title}
+                      onChange={(e) => setEditBoard({ ...editBoard, title: e.target.value })}
+                      placeholder="Enter board title"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="editDescription">Description</Label>
+                    <Textarea
+                      id="editDescription"
+                      value={editBoard.description}
+                      onChange={(e) => setEditBoard({ ...editBoard, description: e.target.value })}
+                      placeholder="Enter board description (optional)"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="editBackgroundColor">Background Color</Label>
+                    <Input
+                      id="editBackgroundColor"
+                      type="color"
+                      value={editBoard.backgroundColor}
+                      onChange={(e) => setEditBoard({ ...editBoard, backgroundColor: e.target.value })}
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="editIsPublic"
+                      checked={editBoard.isPublic}
+                      onCheckedChange={(checked) => setEditBoard({ ...editBoard, isPublic: checked as boolean })}
+                    />
+                    <Label htmlFor="editIsPublic">Make this board public</Label>
+                  </div>
+
+                  {/* Members Section */}
+                  <div className="grid gap-2">
+                    <Label>Members</Label>
+                    <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={isSearchOpen}
+                          className="justify-between"
+                        >
+                          Search users to add...
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0">
+                        <Command>
+                          <CommandInput
+                            placeholder="Search users..."
+                            value={searchQuery}
+                            onValueChange={setSearchQuery}
+                          />
+                          <CommandList>
+                            {searchLoading ? (
+                              <div className="flex items-center justify-center py-6">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="ml-2 text-sm text-gray-500">Searching...</span>
+                              </div>
+                            ) : searchUsers.length === 0 && searchQuery.trim() ? (
                               <CommandEmpty>No users found.</CommandEmpty>
+                            ) : searchUsers.length === 0 ? (
+                              <div className="py-6 text-center text-sm text-gray-500">Type to search for users...</div>
+                            ) : (
                               <CommandGroup>
                                 {searchUsers.map((user) => (
                                   <CommandItem
@@ -462,51 +516,51 @@ export default function DashboardPage() {
                                           : "opacity-0"
                                       }`}
                                     />
-                                    <div>
+                                    <div className="flex flex-col">
                                       <div className="font-medium">{user.username}</div>
                                       <div className="text-sm text-gray-500">{user.email}</div>
                                     </div>
                                   </CommandItem>
                                 ))}
                               </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                            )}
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
 
-                      {/* Selected Members */}
-                      {selectedMembers.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {selectedMembers.map((member) => (
-                            <div
-                              key={member._id}
-                              className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
+                    {/* Selected Members */}
+                    {selectedMembers.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedMembers.map((member) => (
+                          <div
+                            key={member._id}
+                            className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
+                          >
+                            <span>{member.username}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveMember(member._id)}
+                              className="h-4 w-4 p-0 hover:bg-blue-200"
                             >
-                              <span>{member.username}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveMember(member._id)}
-                                className="h-4 w-4 p-0 hover:bg-blue-200"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <DialogFooter>
-                    <Button type="submit" disabled={createLoading}>
-                      {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Update Board
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={createLoading}>
+                    {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Update Board
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           {/* Loading State */}
           {loading && (
