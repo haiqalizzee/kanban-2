@@ -1,6 +1,6 @@
 import axios from "axios"
 
-const BASE_URL = "http://127.0.0.1:3001"
+const BASE_URL = "https://kanban-api-drgj.onrender.com"
 
 export const apiService = axios.create({
   baseURL: `${BASE_URL}/api`,
