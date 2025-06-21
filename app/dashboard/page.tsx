@@ -22,17 +22,27 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Plus, LogOut, Calendar, Check, ChevronsUpDown, UserPlus, X, Edit } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  LogOut,
+  Calendar,
+  Check,
+  ChevronsUpDown,
+  UserPlus,
+  X,
+  Edit,
+  User,
+  Eye,
+  EyeOff,
+} from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-interface User {
-  _id: string
-  username: string
-  email: string
-}
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface BoardMember {
   _id: string
@@ -66,10 +76,10 @@ export default function DashboardPage() {
   const { user, logout } = useAuth()
   const { toast } = useToast()
 
-  const [searchUsers, setSearchUsers] = useState<User[]>([])
+  const [searchUsers, setSearchUsers] = useState<BoardMember[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [selectedMembers, setSelectedMembers] = useState<User[]>([])
+  const [selectedMembers, setSelectedMembers] = useState<BoardMember[]>([])
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingBoard, setEditingBoard] = useState<Board | null>(null)
   const [editBoard, setEditBoard] = useState({
@@ -77,9 +87,21 @@ export default function DashboardPage() {
     description: "",
     backgroundColor: "#007bff",
     isPublic: false,
-    members: [] as User[],
+    members: [] as BoardMember[],
   })
   const [searchLoading, setSearchLoading] = useState(false)
+
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [profileData, setProfileData] = useState({
+    username: user?.username || "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  })
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   useEffect(() => {
     fetchBoards()
@@ -133,7 +155,7 @@ export default function DashboardPage() {
     }
   }
 
-  const handleAddMember = (user: User) => {
+  const handleAddMember = (user: BoardMember) => {
     if (!selectedMembers.find((member) => member._id === user._id)) {
       setSelectedMembers([...selectedMembers, user])
     }
@@ -248,6 +270,79 @@ export default function DashboardPage() {
     })
   }
 
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setProfileLoading(true)
+
+    try {
+      // Update username if changed
+      if (profileData.username !== user?.username) {
+        await apiService.put("/users/profile", {
+          username: profileData.username,
+        })
+
+        // Update user context
+        const updatedUser = { ...user!, username: profileData.username }
+        localStorage.setItem("user", JSON.stringify(updatedUser))
+
+        toast({
+          title: "Success",
+          description: "Username updated successfully",
+        })
+      }
+
+      // Update password if provided
+      if (profileData.newPassword) {
+        if (profileData.newPassword !== profileData.confirmPassword) {
+          toast({
+            title: "Error",
+            description: "New passwords do not match",
+            variant: "destructive",
+          })
+          return
+        }
+
+        await apiService.put("/users/change-password", {
+          currentPassword: profileData.currentPassword,
+          newPassword: profileData.newPassword,
+        })
+
+        toast({
+          title: "Success",
+          description: "Password updated successfully",
+        })
+      }
+
+      setIsProfileModalOpen(false)
+      setProfileData({
+        username: profileData.username,
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      })
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to update profile",
+        variant: "destructive",
+      })
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  const resetProfileForm = () => {
+    setProfileData({
+      username: user?.username || "",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    })
+    setShowCurrentPassword(false)
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
+  }
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
@@ -259,10 +354,35 @@ export default function DashboardPage() {
                 <h1 className="text-2xl font-bold text-gray-900">Kanban Board</h1>
                 <p className="text-sm text-gray-600">Welcome back, {user?.username}</p>
               </div>
-              <Button variant="outline" onClick={logout} className="flex items-center gap-2">
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
+              {/* User Profile Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                        {user?.username.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <div className="flex items-center justify-start gap-2 p-2">
+                    <div className="flex flex-col space-y-1 leading-none">
+                      <p className="font-medium">{user?.username}</p>
+                      <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.email}</p>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)}>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={logout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>
@@ -642,6 +762,136 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+      {/* Profile Modal */}
+      <Dialog
+        open={isProfileModalOpen}
+        onOpenChange={(open) => {
+          setIsProfileModalOpen(open)
+          if (!open) resetProfileForm()
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Profile Settings</DialogTitle>
+            <DialogDescription>Update your username and password here.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateProfile}>
+            <div className="grid gap-4 py-4">
+              {/* Current User Info */}
+              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                <Avatar className="h-12 w-12">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-lg font-semibold">
+                    {user?.username.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{user?.username}</p>
+                  <p className="text-sm text-gray-500">{user?.email}</p>
+                </div>
+              </div>
+
+              {/* Username */}
+              <div className="grid gap-2">
+                <Label htmlFor="username">Username *</Label>
+                <Input
+                  id="username"
+                  value={profileData.username}
+                  onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                  placeholder="Enter new username"
+                  required
+                  minLength={3}
+                />
+                <p className="text-xs text-gray-500">Minimum 3 characters</p>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Change Password (Optional)</h4>
+
+                {/* Current Password */}
+                <div className="grid gap-2 mb-3">
+                  <Label htmlFor="currentPassword">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="currentPassword"
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={profileData.currentPassword}
+                      onChange={(e) => setProfileData({ ...profileData, currentPassword: e.target.value })}
+                      placeholder="Enter current password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    >
+                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* New Password */}
+                <div className="grid gap-2 mb-3">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      value={profileData.newPassword}
+                      onChange={(e) => setProfileData({ ...profileData, newPassword: e.target.value })}
+                      placeholder="Enter new password"
+                      minLength={6}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">Minimum 6 characters</p>
+                </div>
+
+                {/* Confirm Password */}
+                <div className="grid gap-2">
+                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={profileData.confirmPassword}
+                      onChange={(e) => setProfileData({ ...profileData, confirmPassword: e.target.value })}
+                      placeholder="Confirm new password"
+                      minLength={6}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsProfileModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={profileLoading}>
+                {profileLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Update Profile
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   )
 }

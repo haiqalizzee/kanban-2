@@ -1,6 +1,7 @@
 "use client"
 
 import { DialogTrigger } from "@/components/ui/dialog"
+import { LogOut } from "lucide-react"
 
 import type React from "react"
 
@@ -24,10 +25,30 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Plus, ArrowLeft, MoreHorizontal, Trash2, Edit, Calendar, FileText, Save, X } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  ArrowLeft,
+  MoreHorizontal,
+  Trash2,
+  Edit,
+  Calendar,
+  FileText,
+  Save,
+  X,
+  User,
+  Eye,
+  EyeOff,
+} from "lucide-react"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
 import { useToast } from "@/hooks/use-toast"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +64,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 import dynamic from "next/dynamic"
+import { useUser } from "@/context/UserContext"
 
 // Dynamically import the rich text editor to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false })
@@ -119,9 +141,29 @@ export default function BoardPage() {
   const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [notesLoading, setNotesLoading] = useState(false)
 
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [profileData, setProfileData] = useState({
+    username: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  })
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const { user, logout } = useUser()
+
   useEffect(() => {
     fetchBoard()
   }, [boardId])
+
+  useEffect(() => {
+    if (user) {
+      setProfileData({ ...profileData, username: user.username })
+    }
+  }, [user])
 
   const fetchBoard = async () => {
     try {
@@ -363,6 +405,79 @@ export default function BoardPage() {
     setIsEditCardModalOpen(true)
   }
 
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setProfileLoading(true)
+
+    try {
+      // Update username if changed
+      if (profileData.username !== user?.username) {
+        await apiService.put("/users/profile", {
+          username: profileData.username,
+        })
+
+        // Update user context
+        const updatedUser = { ...user!, username: profileData.username }
+        localStorage.setItem("user", JSON.stringify(updatedUser))
+
+        toast({
+          title: "Success",
+          description: "Username updated successfully",
+        })
+      }
+
+      // Update password if provided
+      if (profileData.newPassword) {
+        if (profileData.newPassword !== profileData.confirmPassword) {
+          toast({
+            title: "Error",
+            description: "New passwords do not match",
+            variant: "destructive",
+          })
+          return
+        }
+
+        await apiService.put("/users/change-password", {
+          currentPassword: profileData.currentPassword,
+          newPassword: profileData.newPassword,
+        })
+
+        toast({
+          title: "Success",
+          description: "Password updated successfully",
+        })
+      }
+
+      setIsProfileModalOpen(false)
+      setProfileData({
+        username: user?.username || "",
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      })
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message || "Failed to update profile",
+        variant: "destructive",
+      })
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  const resetProfileForm = () => {
+    setProfileData({
+      username: user?.username || "",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    })
+    setShowCurrentPassword(false)
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
+  }
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -511,6 +626,36 @@ export default function BoardPage() {
                     </form>
                   </DialogContent>
                 </Dialog>
+
+                {/* User Profile Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                          {user?.username.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <div className="flex items-center justify-start gap-2 p-2">
+                      <div className="flex flex-col space-y-1 leading-none">
+                        <p className="font-medium">{user?.username}</p>
+                        <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.email}</p>
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)}>
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={logout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
@@ -789,20 +934,6 @@ export default function BoardPage() {
                           </div>
                         )}
                       </div>
-
-                      {notes && (
-                        <div className="p-4 border-t bg-gray-50">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setIsEditingNotes(true)}
-                            className="w-full flex items-center gap-2 hover:bg-blue-50 hover:border-blue-200"
-                          >
-                            <Edit className="h-4 w-4" />
-                            Edit Notes
-                          </Button>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -932,6 +1063,137 @@ export default function BoardPage() {
               </div>
               <DialogFooter>
                 <Button type="submit">Update Card</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Profile Modal */}
+        <Dialog
+          open={isProfileModalOpen}
+          onOpenChange={(open) => {
+            setIsProfileModalOpen(open)
+            if (!open) resetProfileForm()
+          }}
+        >
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Profile Settings</DialogTitle>
+              <DialogDescription>Update your username and password here.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdateProfile}>
+              <div className="grid gap-4 py-4">
+                {/* Current User Info */}
+                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-lg font-semibold">
+                      {user?.username.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{user?.username}</p>
+                    <p className="text-sm text-gray-500">{user?.email}</p>
+                  </div>
+                </div>
+
+                {/* Username */}
+                <div className="grid gap-2">
+                  <Label htmlFor="username">Username *</Label>
+                  <Input
+                    id="username"
+                    value={profileData.username}
+                    onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                    placeholder="Enter new username"
+                    required
+                    minLength={3}
+                  />
+                  <p className="text-xs text-gray-500">Minimum 3 characters</p>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-3">Change Password (Optional)</h4>
+
+                  {/* Current Password */}
+                  <div className="grid gap-2 mb-3">
+                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="currentPassword"
+                        type={showCurrentPassword ? "text" : "password"}
+                        value={profileData.currentPassword}
+                        onChange={(e) => setProfileData({ ...profileData, currentPassword: e.target.value })}
+                        placeholder="Enter current password"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div className="grid gap-2 mb-3">
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        value={profileData.newPassword}
+                        onChange={(e) => setProfileData({ ...profileData, newPassword: e.target.value })}
+                        placeholder="Enter new password"
+                        minLength={6}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">Minimum 6 characters</p>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={profileData.confirmPassword}
+                        onChange={(e) => setProfileData({ ...profileData, confirmPassword: e.target.value })}
+                        placeholder="Confirm new password"
+                        minLength={6}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsProfileModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={profileLoading}>
+                  {profileLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Update Profile
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
