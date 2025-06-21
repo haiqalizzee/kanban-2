@@ -4,7 +4,7 @@ import { DialogTrigger } from "@/components/ui/dialog"
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { apiService } from "@/services/api"
@@ -39,6 +39,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 import dynamic from "next/dynamic"
 
@@ -68,6 +70,12 @@ interface Column {
   cards: BoardCard[]
 }
 
+interface UserProfile {
+  _id: string
+  username: string
+  email: string
+}
+
 interface Board {
   _id: string
   title: string
@@ -75,6 +83,7 @@ interface Board {
   backgroundColor?: string
   notes?: string
   columns: Column[]
+  members?: UserProfile[]
 }
 
 const priorityColors = {
@@ -280,58 +289,68 @@ export default function BoardPage() {
     }
   }
 
-  const onDragEnd = async (result: DropResult) => {
-    if (!result.destination || !board) return
+  const onDragEnd = useCallback(
+    async (result: DropResult) => {
+      if (!result.destination || !board) return
 
-    const { source, destination, draggableId } = result
+      const { source, destination, draggableId } = result
 
-    // If dropped in the same position, do nothing
-    if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      return
-    }
+      // If dropped in the same position, do nothing
+      if (source.droppableId === destination.droppableId && source.index === destination.index) {
+        return
+      }
 
-    const sourceColumn = board.columns.find((col) => col._id === source.droppableId)
-    const destColumn = board.columns.find((col) => col._id === destination.droppableId)
+      const sourceColumnIndex = board.columns.findIndex((col) => col._id === source.droppableId)
+      const destColumnIndex = board.columns.findIndex((col) => col._id === destination.droppableId)
 
-    if (!sourceColumn || !destColumn) return
+      if (sourceColumnIndex === -1 || destColumnIndex === -1) return
 
-    const draggedCard = sourceColumn.cards[source.index]
+      const sourceColumn = board.columns[sourceColumnIndex]
+      const destColumn = board.columns[destColumnIndex]
+      const draggedCard = sourceColumn.cards[source.index]
 
-    try {
-      // Update card position on server
-      await apiService.put(`/cards/${draggableId}`, {
-        columnId: destination.droppableId,
-        position: destination.index,
-      })
+      // Create new columns array with optimistic update
+      const newColumns = [...board.columns]
 
-      // Update local state
-      const newColumns = board.columns.map((column) => {
-        if (column._id === source.droppableId) {
-          // Remove card from source column
-          const newCards = [...column.cards]
-          newCards.splice(source.index, 1)
-          return { ...column, cards: newCards }
-        }
+      if (source.droppableId === destination.droppableId) {
+        // Moving within the same column
+        const newCards = [...sourceColumn.cards]
+        newCards.splice(source.index, 1)
+        newCards.splice(destination.index, 0, draggedCard)
+        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: newCards }
+      } else {
+        // Moving between different columns
+        const sourceCards = [...sourceColumn.cards]
+        const destCards = [...destColumn.cards]
 
-        if (column._id === destination.droppableId) {
-          // Add card to destination column
-          const newCards = [...column.cards]
-          newCards.splice(destination.index, 0, draggedCard)
-          return { ...column, cards: newCards }
-        }
+        sourceCards.splice(source.index, 1)
+        destCards.splice(destination.index, 0, draggedCard)
 
-        return column
-      })
+        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: sourceCards }
+        newColumns[destColumnIndex] = { ...destColumn, cards: destCards }
+      }
 
+      // Update UI immediately for smooth experience
       setBoard({ ...board, columns: newColumns })
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: "Failed to move card",
-        variant: "destructive",
-      })
-    }
-  }
+
+      try {
+        // Update server
+        await apiService.put(`/cards/${draggableId}`, {
+          columnId: destination.droppableId,
+          position: destination.index,
+        })
+      } catch (err: any) {
+        // Revert on error
+        fetchBoard()
+        toast({
+          title: "Error",
+          description: "Failed to move card",
+          variant: "destructive",
+        })
+      }
+    },
+    [board, toast],
+  )
 
   const openEditCardModal = (card: BoardCard) => {
     setSelectedCard(card)
@@ -383,7 +402,56 @@ export default function BoardPage() {
                   {board.description && <p className="text-sm text-gray-600">{board.description}</p>}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
+                {/* Board Members */}
+                {board.members && board.members.length > 0 && (
+                  <TooltipProvider>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600 font-medium">Members:</span>
+                      <div className="flex -space-x-2">
+                        {board.members.slice(0, 5).map((member) => (
+                          <Tooltip key={member._id}>
+                            <TooltipTrigger asChild>
+                              <Avatar className="h-8 w-8 border-2 border-white hover:z-10 cursor-pointer transition-transform hover:scale-110">
+                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-semibold">
+                                  {member.username.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="text-center">
+                                <p className="font-medium">{member.username}</p>
+                                <p className="text-xs text-gray-500">{member.email}</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                        {board.members.length > 5 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Avatar className="h-8 w-8 border-2 border-white bg-gray-100 cursor-pointer">
+                                <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
+                                  +{board.members.length - 5}
+                                </AvatarFallback>
+                              </Avatar>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div>
+                                <p className="font-medium">More members:</p>
+                                {board.members.slice(5).map((member) => (
+                                  <p key={member._id} className="text-xs">
+                                    {member.username}
+                                  </p>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </div>
+                  </TooltipProvider>
+                )}
+
                 <Button
                   variant="outline"
                   onClick={() => setIsNotesOpen(!isNotesOpen)}
@@ -892,6 +960,24 @@ export default function BoardPage() {
         .ql-editor.ql-blank::before {
           color: #9ca3af;
           font-style: normal;
+        }
+
+        /* Smooth drag and drop animations */
+        .react-beautiful-dnd-draggable {
+          transition: transform 0.2s ease !important;
+        }
+        
+        .react-beautiful-dnd-drag-handle {
+          cursor: grab !important;
+        }
+        
+        .react-beautiful-dnd-drag-handle:active {
+          cursor: grabbing !important;
+        }
+        
+        /* Smooth drop zone highlighting */
+        .react-beautiful-dnd-droppable {
+          transition: background-color 0.2s ease !important;
         }
       `}</style>
     </ProtectedRoute>
