@@ -85,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem("token")
     localStorage.removeItem("user")
+    localStorage.removeItem("chatbot-state") // Clear AI chatbot messages
     setToken(null)
     setUser(null)
     router.push("/login")
