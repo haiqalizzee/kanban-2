@@ -56,6 +56,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { ChatBot } from "@/components/ChatBot"
 
 interface BoardMember {
   _id: string
@@ -991,6 +992,9 @@ export default function DashboardPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ChatBot Component */}
+      <ChatBot boards={boards} user={user} />
     </ProtectedRoute>
   )
 }
