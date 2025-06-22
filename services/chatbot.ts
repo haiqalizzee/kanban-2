@@ -5,13 +5,6 @@ export interface ChatMessage {
   content: string
 }
 
-export interface ChatBubble {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
-
 export const chatbotService = {
   // Generate AI response using backend
   async generateResponse(messages: ChatMessage[]): Promise<string> {

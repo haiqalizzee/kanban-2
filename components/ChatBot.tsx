@@ -3,12 +3,11 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { MessageCircle, Send, Bot, User, Loader2, Trash2 } from 'lucide-react'
-import { chatbotService, type ChatMessage, type ChatBubble } from '@/services/chatbot'
+import { MessageCircle, Send, Bot, User, X, Minus } from 'lucide-react'
+import { chatbotService, type ChatMessage } from '@/services/chatbot'
 import { useToast } from '@/hooks/use-toast'
+import { useChatBot, type ChatBubble } from '@/contexts/ChatBotContext'
 
 interface ChatBotProps {
   boards: any[]
@@ -16,10 +15,20 @@ interface ChatBotProps {
 }
 
 export function ChatBot({ boards = [], user }: ChatBotProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [messages, setMessages] = useState<ChatBubble[]>([])
+  const {
+    isOpen,
+    setIsOpen,
+    isMinimized,
+    setIsMinimized,
+    messages,
+    setMessages,
+    isInitialized,
+    setIsInitialized
+  } = useChatBot()
+  
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
@@ -33,31 +42,25 @@ export function ChatBot({ boards = [], user }: ChatBotProps) {
     }
   }, [messages])
 
-  // Welcome message when chat opens
+  // Welcome message when chat opens for the first time
   useEffect(() => {
-    if (isOpen && messages.length === 0) {
+    if (isOpen && messages.length === 0 && !isInitialized) {
       const boardCount = boards.length
-      const totalCards = boards.reduce((total, board) => total + (board.cards?.length || 0), 0)
       
       const welcomeMessage: ChatBubble = {
         id: 'welcome',
         role: 'assistant',
-        content: `Hey **${user?.username || 'there'}**! 👋 
+        content: `Hi **${user?.username || 'there'}**! 👋 
 
-I can see you've got **${boardCount} board${boardCount !== 1 ? 's' : ''}** going on, and I can peek at all your tasks too! Think of me as your organizing buddy who's here to help you make sense of everything.
+I can help you with your **${boardCount} board${boardCount !== 1 ? 's' : ''}** and tasks.
 
-I'm pretty good at:
-- **Looking at your tasks** and helping you figure out what's urgent
-- **Suggesting ways** to organize your workflow better
-- **Helping you prioritize** when things feel overwhelming
-- **Just chatting** about your projects and what's on your mind
-
-What's going on with your tasks today? Anything stressing you out or need help with? 😊`,
+What can I help you organize today?`,
         timestamp: new Date()
       }
       setMessages([welcomeMessage])
+      setIsInitialized(true)
     }
-  }, [isOpen, user?.username, messages.length, boards.length])
+  }, [isOpen, user?.username, boards.length, messages.length, isInitialized, setMessages, setIsInitialized])
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
@@ -72,12 +75,15 @@ What's going on with your tasks today? Anything stressing you out or need help w
     setMessages(prev => [...prev, userMessage])
     setInputValue('')
     setIsLoading(true)
+    setIsTyping(true)
 
     try {
-      // Backend handles all context and board data
+      // Add a small delay for natural feel
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
       const chatMessages: ChatMessage[] = [
         ...messages
-          .filter(msg => msg.id !== 'welcome') // Exclude welcome message from context
+          .filter(msg => msg.id !== 'welcome')
           .map(msg => ({ role: msg.role, content: msg.content })),
         { role: 'user', content: userMessage.content }
       ]
@@ -95,11 +101,12 @@ What's going on with your tasks today? Anything stressing you out or need help w
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to get response from AI assistant. Please try again.",
+        description: error.message || "Failed to get response. Please try again.",
         variant: "destructive"
       })
     } finally {
       setIsLoading(false)
+      setIsTyping(false)
     }
   }
 
@@ -110,139 +117,151 @@ What's going on with your tasks today? Anything stressing you out or need help w
     }
   }
 
-  const clearChat = () => {
-    setMessages([])
-  }
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
   const formatMessage = (content: string) => {
-    // Convert **text** to bold and *text* to bold as well
     return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**
-      .replace(/\*(.*?)\*/g, '<strong>$1</strong>')      // *bold*
-      .replace(/\n/g, '<br>')                            // line breaks
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>')
+  }
+
+  const toggleChat = () => {
+    if (!isOpen) {
+      setIsOpen(true)
+      setIsMinimized(false)
+    } else {
+      setIsOpen(false)
+      setIsMinimized(false)
+    }
+  }
+
+  const minimizeChat = () => {
+    setIsMinimized(!isMinimized)
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
+    <>
+      {/* Chat Toggle Button */}
+      {!isOpen && (
         <Button
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover-lift z-50"
+          onClick={toggleChat}
+          className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 z-[100]"
           size="icon"
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-5 w-5" />
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
-        <DialogHeader className="p-4 pb-2 border-b">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Bot className="h-5 w-5 text-primary" />
-              Kanban Assistant
-            </DialogTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={clearChat}
-              className="h-8 w-8 p-0"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Ask me about your boards and tasks
-          </p>
-        </DialogHeader>
-        
-        <div className="flex-1 flex flex-col min-h-0">
-          <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
-            <div className="space-y-4 py-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  {message.role === 'assistant' && (
-                    <div className="flex-shrink-0 mt-1">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className={`max-w-[80%] ${message.role === 'user' ? 'order-1' : ''}`}>
-                    <Card className={`${message.role === 'user' ? 'bg-primary text-primary-foreground' : ''}`}>
-                      <CardContent className="p-3">
-                        <div 
-                          className="text-sm whitespace-pre-wrap break-words"
-                          dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
-                        />
-                        <p className={`text-xs mt-2 ${
-                          message.role === 'user' 
-                            ? 'text-primary-foreground/70' 
-                            : 'text-muted-foreground'
-                        }`}>
-                          {formatTime(message.timestamp)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                  
-                  {message.role === 'user' && (
-                    <div className="flex-shrink-0 mt-1 order-2">
-                      <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-                        <User className="h-4 w-4 text-primary-foreground" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className="flex gap-3 justify-start">
-                  <div className="flex-shrink-0 mt-1">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-primary" />
-                    </div>
-                  </div>
-                  <Card>
-                    <CardContent className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm text-muted-foreground">Thinking...</span>
-                      </div>
-                    </CardContent>
-                  </Card>
+      )}
+
+      {/* Floating Chat Panel */}
+      {isOpen && (
+        <div className={`fixed right-6 bottom-20 w-80 bg-background border rounded-lg shadow-2xl z-[99] transition-all duration-300 transform ${
+          isMinimized ? 'h-12' : 'h-96'
+        } ${isOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+          
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b bg-background rounded-t-lg">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bot className="h-3 w-3 text-primary" />
+              </div>
+              <span className="text-sm font-medium">Assistant</span>
+              {isTyping && (
+                <div className="flex gap-1 ml-2">
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-pulse"></div>
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
                 </div>
               )}
             </div>
-          </ScrollArea>
-          
-          <div className="p-4 border-t">
-            <div className="flex gap-2">
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask about your boards..."
-                disabled={isLoading}
-                className="flex-1"
-              />
-              <Button 
-                onClick={handleSendMessage} 
-                disabled={!inputValue.trim() || isLoading}
-                size="icon"
-                className="shrink-0"
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={minimizeChat}
+                className="h-6 w-6 p-0 hover:bg-muted/50 rounded-full"
               >
-                <Send className="h-4 w-4" />
+                <Minus className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsOpen(false)}
+                className="h-6 w-6 p-0 hover:bg-muted/50 rounded-full"
+              >
+                <X className="h-3 w-3" />
               </Button>
             </div>
           </div>
+
+          {/* Chat Content */}
+          {!isMinimized && (
+            <>
+              <ScrollArea className="h-80 p-3 bg-background" ref={scrollAreaRef}>
+                <div className="space-y-3">
+                  {messages.map((message, index) => (
+                    <div
+                      key={message.id}
+                      className={`flex gap-2 animate-in slide-in-from-bottom-2 duration-300 ${
+                        message.role === 'user' ? 'justify-end' : 'justify-start'
+                      }`}
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      {message.role === 'assistant' && (
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Bot className="h-3 w-3 text-primary" />
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className={`max-w-[75%] ${message.role === 'user' ? 'order-1' : ''}`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm transition-all duration-200 hover:shadow-sm ${
+                          message.role === 'user' 
+                            ? 'bg-primary text-primary-foreground rounded-br-md' 
+                            : 'bg-muted rounded-bl-md'
+                        }`}>
+                          <div 
+                            className="leading-relaxed"
+                            dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
+                          />
+                        </div>
+                      </div>
+                      
+                      {message.role === 'user' && (
+                        <div className="flex-shrink-0 mt-0.5 order-2">
+                          <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
+                            <User className="h-3 w-3 text-primary-foreground" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+              
+              <div className="p-3 border-t bg-background rounded-b-lg">
+                <div className="flex gap-2">
+                  <Input
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Ask me anything..."
+                    disabled={isLoading}
+                    className="flex-1 h-8 text-sm border-0 bg-muted/50 focus-visible:ring-1 focus-visible:ring-primary/50 rounded-full px-3"
+                  />
+                  <Button 
+                    onClick={handleSendMessage} 
+                    disabled={!inputValue.trim() || isLoading}
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-full shrink-0"
+                  >
+                    <Send className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </>
   )
 } 

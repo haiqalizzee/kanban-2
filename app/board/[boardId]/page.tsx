@@ -67,6 +67,7 @@ import dynamic from "next/dynamic"
 import { useAuth } from "@/contexts/AuthContext"
 import Head from "next/head"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ChatBot } from "@/components/ChatBot"
 
 // Dynamically import the rich text editor to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false })
@@ -361,39 +362,60 @@ export default function BoardPage() {
         const newCards = [...sourceColumn.cards]
         newCards.splice(source.index, 1)
         newCards.splice(destination.index, 0, draggedCard)
-        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: newCards }
+        
+        // Update positions for all cards in the column
+        const updatedCards = newCards.map((card, index) => ({ ...card, position: index }))
+        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: updatedCards }
       } else {
         // Moving between different columns
         const sourceCards = [...sourceColumn.cards]
         const destCards = [...destColumn.cards]
 
         sourceCards.splice(source.index, 1)
-        destCards.splice(destination.index, 0, draggedCard)
+        destCards.splice(destination.index, 0, { ...draggedCard, position: destination.index })
 
-        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: sourceCards }
-        newColumns[destColumnIndex] = { ...destColumn, cards: destCards }
+        // Update positions for all cards in both columns
+        const updatedSourceCards = sourceCards.map((card, index) => ({ ...card, position: index }))
+        const updatedDestCards = destCards.map((card, index) => ({ ...card, position: index }))
+
+        newColumns[sourceColumnIndex] = { ...sourceColumn, cards: updatedSourceCards }
+        newColumns[destColumnIndex] = { ...destColumn, cards: updatedDestCards }
       }
 
       // Update UI immediately for smooth experience
       setBoard({ ...board, columns: newColumns })
 
       try {
-        // Update server
-        await apiService.put(`/cards/${draggableId}`, {
-          columnId: destination.droppableId,
-          position: destination.index,
-        })
+        // Update server with proper payload
+        const updatePayload = {
+          newColumnId: destination.droppableId,
+          newPosition: destination.index
+        }
+        
+        console.log('Moving card:', draggableId, 'with payload:', updatePayload)
+        
+        const response = await apiService.put(`/cards/${draggableId}/move`, updatePayload)
+        console.log('Card update response:', response.data)
+        
+        // Optionally refresh board data to ensure consistency
+        if (response.status === 200) {
+          // Small delay then refresh to ensure server has processed the update
+          setTimeout(() => {
+            fetchBoard()
+          }, 100)
+        }
       } catch (err: any) {
+        console.error('Failed to move card:', err)
         // Revert on error
         fetchBoard()
         toast({
           title: "Error",
-          description: "Failed to move card",
+          description: err.response?.data?.message || "Failed to move card",
           variant: "destructive",
         })
       }
     },
-    [board, toast],
+    [board, toast, fetchBoard],
   )
 
   const openEditCardModal = (card: BoardCard) => {
@@ -1309,6 +1331,9 @@ export default function BoardPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* ChatBot Component */}
+        <ChatBot boards={board ? [board] : []} user={user} />
       </div>
       <style jsx global>{`
         .ql-editor {
