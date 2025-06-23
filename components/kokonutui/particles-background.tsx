@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo, memo } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
@@ -126,7 +126,7 @@ interface Particle {
     maxLife: number;
 }
 
-export default function ParticlesBackground({
+function ParticlesBackgroundComponent({
     title = "Particles Background",
     subtitle = "Make your website stand out",
     particleCount = 2000,
@@ -135,7 +135,10 @@ export default function ParticlesBackground({
     className,
 }: CyberBackgroundProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const noise = createNoise();
+    const animationIdRef = useRef<number | null>(null);
+    
+    // Memoize the noise object to prevent recreation on every render
+    const noise = useMemo(() => createNoise(), []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -143,6 +146,11 @@ export default function ParticlesBackground({
 
         const ctx = canvas.getContext("2d", { alpha: true });
         if (!ctx) return;
+
+        // Cancel any existing animation
+        if (animationIdRef.current) {
+            cancelAnimationFrame(animationIdRef.current);
+        }
 
         const resizeCanvas = () => {
             const container = canvas.parentElement;
@@ -170,7 +178,6 @@ export default function ParticlesBackground({
 
         const animate = () => {
             const isDark = document.documentElement.classList.contains("dark");
-            const scheme = isDark ? COLOR_SCHEME.dark : COLOR_SCHEME.light;
 
             ctx.fillStyle = isDark
                 ? "rgba(0, 0, 0, 0.1)"
@@ -215,7 +222,7 @@ export default function ParticlesBackground({
                 ctx.fill();
             }
 
-            requestAnimationFrame(animate);
+            animationIdRef.current = requestAnimationFrame(animate);
         };
 
         animate();
@@ -225,7 +232,15 @@ export default function ParticlesBackground({
         };
 
         window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
+        
+        return () => {
+            // Clean up animation and event listener
+            if (animationIdRef.current) {
+                cancelAnimationFrame(animationIdRef.current);
+                animationIdRef.current = null;
+            }
+            window.removeEventListener("resize", handleResize);
+        };
     }, [particleCount, noiseIntensity, particleSize, noise]);
 
     return (
@@ -258,3 +273,6 @@ export default function ParticlesBackground({
         </div>
     );
 }
+
+// Export memoized component to prevent unnecessary re-renders
+export default memo(ParticlesBackgroundComponent);
