@@ -946,16 +946,6 @@ export default function BoardPage() {
                 <div className="flex-1 flex flex-col overflow-hidden">
                   {isEditingNotes ? (
                     <div className="flex-1 flex flex-col">
-                      {/* Editing Header */}
-                      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
-                        <h4 className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                          <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                          Editing Notes
-                        </h4>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Use the toolbar below to format your notes
-                        </div>
-                      </div>
 
                       {/* Editor */}
                       <div className="flex-1 flex flex-col p-4">
